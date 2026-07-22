@@ -569,7 +569,9 @@ $('startBtn').addEventListener('click', () => {
   $('startBtn').disabled = true;
   $('stopBtn').disabled = false;
   acquireWakeLock();
-  startMicMeter();
+  // マイク入力レベルメーター用の独自getUserMediaが、音声認識のマイクアクセスと競合し
+  // 認識結果が一切返らなくなる不具合が実機で確認されたため、一旦無効化する。
+  // startMicMeter();
   state.autosaveTimer = setInterval(saveSession, AUTOSAVE_INTERVAL_MS);
 });
 
@@ -578,7 +580,7 @@ function stopInternals(){
   clearTimeout(state.reconnectTimer);
   clearInterval(state.autosaveTimer);
   releaseWakeLock();
-  stopMicMeter();
+  // stopMicMeter(); // startMicMeter()と対で無効化中
   $('startBtn').disabled = false;
   $('stopBtn').disabled = true;
   saveSession();
