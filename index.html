@@ -671,7 +671,10 @@ async function callClaude(apiKey, prompt, maxTokens){
     throw new Error(`APIエラー (HTTP ${res.status}): ${errBody.slice(0,200)}`);
   }
   const data = await res.json();
-  return (data.content && data.content[0] && data.content[0].text) || '';
+  // content[0]を決め打ちで読むと、応答に「thinking」等のtext以外のブロックが
+  // 先頭に含まれる場合に本文を取りこぼすため、type==='text'のブロックだけを連結する。
+  if(!Array.isArray(data.content)) return '';
+  return data.content.filter(b => b && b.type === 'text').map(b => b.text).join('\n').trim();
 }
 
 /* ========== 議事録・TODO生成 ========== */
