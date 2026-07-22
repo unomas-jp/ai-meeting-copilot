@@ -396,13 +396,11 @@ function createRecognition(){
   }
   const r = new SR();
   r.lang = 'ja-JP';
-  // 【実験】continuous:false だと発話の区切りごとにセッションが終了→再開し、
-  // その都度Android側の開始/終了ビープ音が鳴ってしまう問題があった。
-  // continuous:true が結果を返さない不具合の実体は、実は別途動かしていた
-  // マイクレベルメーター用getUserMediaとの競合だった可能性が高く、その競合は
-  // 解消済みのため、ここでは continuous:true に戻して再検証する。
-  // もし結果が返らない・頻繁に切断される等の問題が再発する場合は false に戻すこと。
-  r.continuous = true;
+  // continuous:true を試したが、実機ではAndroid側の音声認識サービスが内部的に
+  // 短い区切りでセッションを終了させてしまうらしく、ビープ音の頻度は変わらなかった。
+  // （= continuous指定はブラウザからは徹底できないOS側の制約と判断）
+  // 動作確認が取れている continuous:false + 自動再スタート方式に戻す。
+  r.continuous = false;
   r.interimResults = true;
 
   r.onstart = () => { debugLog('onstart（認識セッション開始）'); };
