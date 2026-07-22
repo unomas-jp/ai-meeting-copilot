@@ -251,7 +251,8 @@ const state = {
   todoText: '',
   activeTab: 'minutes',
   reconnectTimer: null,
-  reconnectDelay: 300,
+  reconnectDelay: 150,
+  consecutiveFailures: 0,
   wakeLock: null,
   micStream: null,
   audioCtx: null,
@@ -382,7 +383,9 @@ function createRecognition(){
   }
   const r = new SR();
   r.lang = 'ja-JP';
-  r.continuous = true;
+  // Android Chromeでは continuous:true だと認識結果が返らなくなる既知の不具合があるため、
+  // 単発モード(continuous:false)で短い区切りごとに自動再スタートする方式にする。
+  r.continuous = false;
   r.interimResults = true;
 
   r.onresult = (event) => {
@@ -403,6 +406,7 @@ function createRecognition(){
     }
     state.interimText = interim;
     state.lastSoundAt = Date.now();
+    state.consecutiveFailures = 0; // 結果が返ってきている＝正常に機能している証拠
     silenceHint.classList.remove('show');
     renderLog();
   };
@@ -415,7 +419,7 @@ function createRecognition(){
       showWarnBanner('⚠️ マイクの使用が許可されていません。ブラウザの設定をご確認ください');
       stopInternals();
     }
-    // no-speech / network / audio-capture 等は onend 側の再接続に任せる
+    // no-speech / network / audio-capture 等は onend 側の再スタートに任せる
   };
 
   r.onend = () => {
@@ -423,29 +427,35 @@ function createRecognition(){
       setStatus('stopped', '⏸️ 停止');
       return;
     }
-    // 想定外の停止 → 指数バックオフで再接続
-    setStatus('error', '⚠️ 再接続中');
-    showWarnBanner('⚠️ 音声認識が停止しました。自動的に再接続を試みています');
-    scheduleReconnect();
+    // continuous:false の仕様上、発話の区切りごとに毎回 onend が発生するのが正常動作。
+    // ここでは「異常な停止」ではなく「通常の区切り」として、目立たせずに即時再スタートする。
+    restartRecognitionQuietly();
   };
 
   return r;
 }
 
-function scheduleReconnect(){
+function restartRecognitionQuietly(){
   clearTimeout(state.reconnectTimer);
   state.reconnectTimer = setTimeout(() => {
     if(state.manuallyStopped) return;
     try{
       recognition.start();
-      state.reconnectDelay = 300;
+      state.consecutiveFailures = 0;
+      state.reconnectDelay = 150;
       setStatus('rec', '🔴 録音中');
       hideWarnBanner();
     }catch(e){
-      state.reconnectDelay = Math.min(state.reconnectDelay * 2, 5000);
-      scheduleReconnect();
+      state.consecutiveFailures = (state.consecutiveFailures || 0) + 1;
+      state.reconnectDelay = Math.min((state.reconnectDelay || 150) * 2, 5000);
+      // 短い区切りの再スタート失敗が連続する場合のみ、異常停止として警告を出す
+      if(state.consecutiveFailures >= 5){
+        setStatus('error', '⚠️ 再接続中');
+        showWarnBanner('⚠️ 音声認識が停止しています。「再開」を押してください');
+      }
+      restartRecognitionQuietly();
     }
-  }, state.reconnectDelay);
+  }, state.reconnectDelay || 150);
 }
 
 /* ========== マイク入力レベルメーター ========== */
@@ -512,7 +522,8 @@ $('startBtn').addEventListener('click', () => {
   recognition = createRecognition();
   if(!recognition) return;
   state.manuallyStopped = false;
-  state.reconnectDelay = 300;
+  state.reconnectDelay = 150;
+  state.consecutiveFailures = 0;
   try{
     recognition.start();
   }catch(e){
@@ -551,10 +562,11 @@ $('stopBtn').addEventListener('click', () => {
 $('warnResumeBtn').addEventListener('click', () => {
   hideWarnBanner();
   state.manuallyStopped = false;
-  state.reconnectDelay = 300;
+  state.reconnectDelay = 150;
+  state.consecutiveFailures = 0;
   if(recognition){
     try{ recognition.start(); setStatus('rec', '🔴 録音中'); }
-    catch(e){ scheduleReconnect(); }
+    catch(e){ restartRecognitionQuietly(); }
   }
 });
 
