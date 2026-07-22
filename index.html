@@ -105,6 +105,8 @@
     <button id="warnResumeBtn">再開</button>
   </div>
 
+  <div id="debugLine" style="font-size:11px;color:var(--sub);margin:-4px 0 10px 2px;"></div>
+
   <details id="contextPanel" class="card">
     <summary>📝 会議コンテキスト（任意）</summary>
     <textarea id="meetingContext" placeholder="会議の目的・参加者・アジェンダなど（未入力でも開始できます）"></textarea>
@@ -253,6 +255,8 @@ const state = {
   reconnectTimer: null,
   reconnectDelay: 150,
   consecutiveFailures: 0,
+  errorRepeatCount: 0,
+  lastErrorType: null,
   wakeLock: null,
   micStream: null,
   audioCtx: null,
@@ -375,6 +379,15 @@ function clearSession(){
 }
 
 /* ========== 音声認識 ========== */
+/* 診断用ログ表示：現在なぜ動いていないのかを画面上で確認できるようにする */
+let debugEventCount = 0;
+function debugLog(label){
+  debugEventCount++;
+  const el = $('debugLine');
+  if(el) el.textContent = `診断: [${debugEventCount}] ${label} (${nowHHMM()})`;
+  console.log('[AIMC debug]', debugEventCount, label);
+}
+
 function createRecognition(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
@@ -387,6 +400,11 @@ function createRecognition(){
   // 単発モード(continuous:false)で短い区切りごとに自動再スタートする方式にする。
   r.continuous = false;
   r.interimResults = true;
+
+  r.onstart = () => { debugLog('onstart（認識セッション開始）'); };
+  r.onaudiostart = () => { debugLog('onaudiostart（マイクからの音声受信開始）'); };
+  r.onspeechstart = () => { debugLog('onspeechstart（発話を検知）'); };
+  r.onsoundstart = () => { debugLog('onsoundstart（音を検知）'); };
 
   r.onresult = (event) => {
     let interim = '';
@@ -407,22 +425,37 @@ function createRecognition(){
     state.interimText = interim;
     state.lastSoundAt = Date.now();
     state.consecutiveFailures = 0; // 結果が返ってきている＝正常に機能している証拠
+    state.errorRepeatCount = 0;
     silenceHint.classList.remove('show');
+    debugLog(`onresult: ${event.results.length}件（interim="${interim.slice(0,20)}"）`);
     renderLog();
   };
 
   r.onerror = (event) => {
     console.warn('SpeechRecognition error:', event.error);
+    debugLog(`onerror: ${event.error}`);
     if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){
       state.manuallyStopped = true;
       setStatus('error', '⚠️ マイク権限エラー');
       showWarnBanner('⚠️ マイクの使用が許可されていません。ブラウザの設定をご確認ください');
       stopInternals();
+      return;
     }
-    // no-speech / network / audio-capture 等は onend 側の再スタートに任せる
+    // no-speech / network / audio-capture 等が連続する場合は、画面上に分かるようにする
+    if(state.lastErrorType === event.error){
+      state.errorRepeatCount = (state.errorRepeatCount || 0) + 1;
+    } else {
+      state.errorRepeatCount = 1;
+      state.lastErrorType = event.error;
+    }
+    if(state.errorRepeatCount >= 3){
+      setStatus('error', '⚠️ エラー: ' + event.error);
+      showWarnBanner(`⚠️ 音声認識でエラーが継続しています（${event.error}）。「再開」を押すか、時間をおいてお試しください`);
+    }
   };
 
   r.onend = () => {
+    debugLog('onend（このセッション終了）');
     if(state.manuallyStopped){
       setStatus('stopped', '⏸️ 停止');
       return;
