@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI Meeting Copilot</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#121212">
+<style>
+  :root{
+    --bg:#121212; --panel:#1e1e1e; --panel2:#262626; --border:#3a3a3a;
+    --text:#f0f0f0; --sub:#a0a0a0; --accent:#4fa3ff; --warn:#ffcc4d; --danger:#ff5c5c; --ok:#4dd68a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Hiragino Sans","Segoe UI",sans-serif;
+    padding-bottom:16px;}
+  header{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--border);
+    padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;z-index:20;}
+  #statusBadge{padding:4px 8px;border-radius:12px;font-size:13px;font-weight:bold;background:#333;}
+  #statusBadge.rec{background:#5a1616;color:#ff8a8a;}
+  #statusBadge.stopped{background:#333;color:var(--sub);}
+  #statusBadge.error{background:#5a1616;color:var(--danger);}
+  #micMeterWrap{flex:0 0 60px;height:10px;background:#333;border-radius:5px;overflow:hidden;display:none;}
+  #micMeterWrap.show{display:block;}
+  #micMeterBar{height:100%;width:0%;background:var(--ok);transition:width .1s;}
+  select,button,textarea,input{font-family:inherit;font-size:14px;}
+  select#modeSelect{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    border-radius:8px;padding:6px 8px;}
+  #settingsBtn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:6px 10px;cursor:pointer;}
+  main{padding:12px;max-width:640px;margin:0 auto;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px;}
+  #contextPanel summary{cursor:pointer;font-weight:bold;font-size:13px;color:var(--sub);}
+  #contextPanel textarea{width:100%;margin-top:8px;background:var(--panel2);color:var(--text);
+    border:1px solid var(--border);border-radius:8px;padding:8px;resize:vertical;min-height:50px;}
+  #adviceArea{background:linear-gradient(135deg,#2a2410,#102a24);border:2px solid var(--warn);
+    border-radius:12px;padding:16px;font-size:17px;line-height:1.5;font-weight:bold;min-height:52px;
+    display:flex;align-items:center;}
+  #warnBanner{display:none;background:#5a1616;color:#ffdcdc;border-radius:10px;padding:10px 12px;
+    margin-bottom:12px;font-size:14px;align-items:center;gap:8px;justify-content:space-between;}
+  #warnBanner.show{display:flex;}
+  #warnBanner button{background:var(--danger);border:none;color:#fff;border-radius:6px;padding:6px 10px;}
+  .silenceHint{display:none;font-size:12px;color:var(--sub);margin-top:6px;}
+  .silenceHint.show{display:block;}
+  .btnRow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+  .btnRow button{flex:1 1 auto;min-width:88px;padding:10px 8px;border-radius:10px;border:1px solid var(--border);
+    background:var(--panel2);color:var(--text);cursor:pointer;font-size:13px;}
+  .btnRow button:disabled{opacity:.5;}
+  .btnRow button.primary{background:var(--accent);color:#04223f;border-color:var(--accent);font-weight:bold;}
+  .btnRow button.danger{background:#3a1414;border-color:#6b2323;color:#ffb4b4;}
+  .tabs{display:flex;gap:4px;margin-bottom:8px;}
+  .tabs button{flex:1;padding:8px;border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;
+    background:var(--panel2);color:var(--sub);cursor:pointer;}
+  .tabs button.active{background:var(--panel);color:var(--text);font-weight:bold;}
+  #resultText{width:100%;min-height:160px;background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    border-radius:0 8px 8px 8px;padding:10px;resize:vertical;}
+  .outRow{display:flex;gap:8px;margin-top:8px;}
+  .outRow button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);
+    color:var(--text);}
+  #logArea{max-height:280px;overflow-y:auto;background:#0c0c0c;border:1px solid var(--border);border-radius:10px;
+    padding:10px;font-size:13px;line-height:1.6;}
+  #logArea .line{margin-bottom:4px;}
+  #logArea .ts{color:var(--sub);margin-right:6px;}
+  #logArea .interim{color:#888;font-style:italic;}
+  .placeholderNote{color:var(--sub);font-size:12px;margin-bottom:6px;}
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:14px;
+    padding:16px;width:min(92vw,480px);}
+  dialog::backdrop{background:rgba(0,0,0,.6);}
+  dialog h3{margin-top:0;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px;}
+  .field input[type=text],.field input[type=password],.field textarea{width:100%;background:var(--panel2);
+    color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;}
+  .glossaryRow{display:flex;gap:6px;margin-bottom:6px;}
+  .glossaryRow input{flex:1;}
+  .glossaryRow button{background:#3a1414;border:1px solid #6b2323;color:#ffb4b4;border-radius:6px;padding:0 10px;}
+  #modalActions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+  #modalActions button{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);
+    color:var(--text);}
+  #modalActions button.save{background:var(--accent);color:#04223f;border-color:var(--accent);font-weight:bold;}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#222;color:#fff;
+    padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;}
+  #toast.show{opacity:1;}
+  small.hint{color:var(--sub);font-size:11px;}
+</style>
+</head>
+<body>
+
+<header>
+  <span id="statusBadge" class="stopped">⏸️ 停止</span>
+  <div id="micMeterWrap"><div id="micMeterBar"></div></div>
+  <select id="modeSelect">
+    <option value="pm">📊 PM・進行管理</option>
+    <option value="sales">🤝 案件受注・営業面談</option>
+    <option value="hiring">👥 採用・パートナー面談</option>
+    <option value="custom">⚙️ カスタムプロンプト</option>
+  </select>
+  <button id="settingsBtn">⚙️ 設定</button>
+</header>
+
+<main>
+
+  <div id="warnBanner">
+    <span id="warnText">⚠️ 音声認識が停止しています</span>
+    <button id="warnResumeBtn">再開</button>
+  </div>
+
+  <details id="contextPanel" class="card">
+    <summary>📝 会議コンテキスト（任意）</summary>
+    <textarea id="meetingContext" placeholder="会議の目的・参加者・アジェンダなど（未入力でも開始できます）"></textarea>
+  </details>
+
+  <div class="card">
+    <div id="adviceArea">💡 録音を開始すると、ここにカンペが表示されます</div>
+    <div id="silenceHint" class="silenceHint">🔇 マイクが無音のようです。マイクの位置をご確認ください</div>
+  </div>
+
+  <div class="btnRow">
+    <button id="startBtn" class="primary">▶️ 録音開始</button>
+    <button id="stopBtn" disabled>⏸️ 停止</button>
+    <button id="clearBtn" class="danger">🗑️ ログクリア</button>
+  </div>
+  <div class="btnRow">
+    <button id="minutesBtn">📝 議事録作成</button>
+    <button id="todoBtn">✅ TODO抽出</button>
+    <button id="bothBtn" class="primary">🗂️ まとめて生成</button>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button id="tabMinutes" class="active">議事録</button>
+      <button id="tabTodo">TODO</button>
+    </div>
+    <textarea id="resultText" placeholder="生成された内容がここに表示されます（直接編集できます）"></textarea>
+    <div class="outRow">
+      <button id="copySlack">💬 Slack形式コピー</button>
+      <button id="copyNotion">📋 Notion/Backlog用コピー</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="placeholderNote">📜 音声ログ（※話者分離はできません。発言者ごとの区別はされません）</div>
+    <div id="logArea"></div>
+  </div>
+
+</main>
+
+<dialog id="settingsModal">
+  <h3>⚙️ 設定</h3>
+  <div class="field">
+    <label>Claude APIキー</label>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <small class="hint">この端末の localStorage に保存されます。個人管理の端末でのみご利用ください。</small>
+  </div>
+  <div class="field">
+    <label>カスタムプロンプト（モード4で使用）</label>
+    <textarea id="customPromptInput" rows="3" placeholder="モード4選択時に監視してほしい観点を自由に記述してください"></textarea>
+  </div>
+  <div class="field">
+    <label>用語集（音声認識の誤認識補正）</label>
+    <div id="glossaryList"></div>
+    <button id="addGlossaryRow" type="button">＋ 用語を追加</button>
+  </div>
+  <div id="modalActions">
+    <button id="settingsCancel">キャンセル</button>
+    <button id="settingsSave" class="save">保存</button>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ========== 定数・モード定義 ========== */
+const MODES = {
+  pm:     { label: '📊 PM・進行管理',
+            instructions: 'スコープ拡大（要件追加）、予算/納期未定義、担当者曖昧、リスクを重点的に検知してください。' },
+  sales:  { label: '🤝 案件受注・営業面談',
+            instructions: '顧客の真の課題（ペイン）、予算感、決裁権者、深掘りすべき質問の機会を重点的に検知してください。' },
+  hiring: { label: '👥 採用・パートナー面談',
+            instructions: '具体的な実績・エピソード（STAR法）、再現性、懸念点を重点的に検知してください。' },
+  custom: { label: '⚙️ カスタムプロンプト', instructions: null }
+};
+const ADVICE_MIN_INTERVAL_MS = 15000;
+const ADVICE_LOG_WINDOW_MS   = 2 * 60 * 1000;
+const ADVICE_LOG_MAX_CHARS   = 1000;
+const AUTOSAVE_INTERVAL_MS   = 60 * 1000;
+const SILENCE_WARN_MS        = 30 * 1000;
+const CLAUDE_MODEL           = 'claude-sonnet-5';
+const LS_KEYS = {
+  apiKey: 'aimc.apiKey', customPrompt: 'aimc.customPrompt', glossary: 'aimc.glossary', session: 'aimc.session'
+};
+
+const PROMPT_A = (mode, modeInstructions, meetingContext, adviceHistory, recentLog) => `あなたは会議のリアルタイム参謀AIです。現在のモードは【${mode}】です。
+特に以下の観点を重点的に監視してください：
+【${modeInstructions || 'なし'}】
+
+この会議の背景情報（未入力の場合は無視してよい）：
+【${meetingContext || 'なし'}】
+
+直近に提示した確認・質問（重複しないよう、同趣旨の指摘は避けてください。なければ「なし」）：
+【${adviceHistory || 'なし'}】
+
+提供された直近の会話ログから、会議を円滑に進めるための「次に確認・質問すべきポイント」を1つだけ特定してください。
+
+【出力ルール】
+・必ず50文字以内の短文（1〜2行）で出力すること。
+・「💡 〜を確認してください」「💡 〜について質問してください」の形式にすること。
+・確認すべき点がない場合は「💡 現在のところ順調です」とだけ出力すること。
+
+【直近の会話ログ】
+${recentLog || '（まだ発言がありません）'}`;
+
+const PROMPT_B = (meetingContext, fullLog) => `以下の会議文字起こしログから、正式な【議事録】を作成してください。
+※音声認識の仕様上、話者の区別がされていません。文脈から決定事項や経緯を論理的に整理してください。
+
+この会議の背景情報（未入力の場合は無視してよい）：
+【${meetingContext || 'なし'}】
+
+【出力フォーマット】
+■ 会議概要・目的
+■ 決定事項
+■ 協議・検討事項（背景や議論の経緯）
+■ 次回アクション / 課題
+
+【会話ログ】
+${fullLog}`;
+
+const PROMPT_C = (fullLog) => `以下の会議文字起こしログから、発生した【タスク・TODO】をすべて抽出してください。
+
+【出力フォーマット】
+- [ ] 【担当者】タスク内容（期限：MM/DD）
+※会話ログから担当者や期限が明確に読み取れない場合は、推測せずに「未定」と記載してください。
+
+【会話ログ】
+${fullLog}`;
+
+/* ========== 状態 ========== */
+const state = {
+  recording: false,
+  manuallyStopped: true,
+  mode: 'pm',
+  log: [],            // {t:'HH:MM', text:'...'}
+  interimText: '',
+  adviceHistory: [],  // string[]
+  adviceInFlight: false,
+  lastAdviceDoneAt: 0,
+  minutesText: '',
+  todoText: '',
+  activeTab: 'minutes',
+  reconnectTimer: null,
+  reconnectDelay: 300,
+  wakeLock: null,
+  micStream: null,
+  audioCtx: null,
+  lastSoundAt: 0,
+  glossary: [],   // {from,to}[]
+};
+
+let recognition = null;
+
+/* ========== DOM参照 ========== */
+const $ = (id) => document.getElementById(id);
+const statusBadge = $('statusBadge');
+const modeSelect = $('modeSelect');
+const meetingContextEl = $('meetingContext');
+const adviceArea = $('adviceArea');
+const silenceHint = $('silenceHint');
+const warnBanner = $('warnBanner');
+const warnText = $('warnText');
+const logArea = $('logArea');
+const resultText = $('resultText');
+const micMeterWrap = $('micMeterWrap');
+const micMeterBar = $('micMeterBar');
+
+/* ========== ユーティリティ ========== */
+function nowHHMM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function applyGlossary(text){
+  let out = text;
+  for(const {from,to} of state.glossary){
+    if(!from) continue;
+    out = out.split(from).join(to);
+  }
+  return out;
+}
+function fullLogPlainText(){
+  // 表示用タイムスタンプを除去したプレーンテキスト（API送信用）
+  return state.log.map(l => l.text).join('\n');
+}
+function recentLogForAdvice(){
+  const cutoff = Date.now() - ADVICE_LOG_WINDOW_MS;
+  const recent = state.log.filter(l => l.at >= cutoff).map(l => l.text).join('\n');
+  return recent.length > ADVICE_LOG_MAX_CHARS ? recent.slice(-ADVICE_LOG_MAX_CHARS) : recent;
+}
+
+/* ========== ログ描画 ========== */
+function renderLog(){
+  const finalHtml = state.log.map(l =>
+    `<div class="line"><span class="ts">[${l.t}]</span>${escapeHtml(l.text)}</div>`).join('');
+  const interimHtml = state.interimText
+    ? `<div class="line interim">${escapeHtml(state.interimText)}</div>` : '';
+  logArea.innerHTML = finalHtml + interimHtml;
+  logArea.scrollTop = logArea.scrollHeight;
+}
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ========== ステータス表示 ========== */
+function setStatus(kind, label){
+  statusBadge.className = kind;
+  statusBadge.textContent = label;
+}
+function showWarnBanner(text){
+  warnText.textContent = text;
+  warnBanner.classList.add('show');
+}
+function hideWarnBanner(){
+  warnBanner.classList.remove('show');
+}
+
+/* ========== localStorage 永続化 ========== */
+function loadSettings(){
+  try{ state.glossary = JSON.parse(localStorage.getItem(LS_KEYS.glossary) || '[]'); }catch(e){ state.glossary = []; }
+}
+function saveSession(){
+  const payload = {
+    mode: state.mode,
+    meetingContext: meetingContextEl.value,
+    log: state.log,
+    minutesText: state.minutesText,
+    todoText: state.todoText,
+  };
+  try{ localStorage.setItem(LS_KEYS.session, JSON.stringify(payload)); }catch(e){ /* 容量超過等は無視 */ }
+}
+function loadSession(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(LS_KEYS.session) || 'null'); }catch(e){}
+  if(!saved) return;
+  state.mode = saved.mode || 'pm';
+  modeSelect.value = state.mode;
+  meetingContextEl.value = saved.meetingContext || '';
+  state.log = saved.log || [];
+  state.minutesText = saved.minutesText || '';
+  state.todoText = saved.todoText || '';
+  renderLog();
+  syncResultTextarea();
+  if(state.log.length){
+    toast('前回のログを復元しました');
+  }
+}
+function clearSession(){
+  state.log = [];
+  state.interimText = '';
+  state.adviceHistory = [];
+  state.minutesText = '';
+  state.todoText = '';
+  meetingContextEl.value = '';
+  adviceArea.textContent = '💡 録音を開始すると、ここにカンペが表示されます';
+  renderLog();
+  syncResultTextarea();
+  localStorage.removeItem(LS_KEYS.session);
+}
+
+/* ========== 音声認識 ========== */
+function createRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    alert('お使いの環境は音声認識(Web Speech API)に対応していません。Android Chromeでご利用ください。');
+    return null;
+  }
+  const r = new SR();
+  r.lang = 'ja-JP';
+  r.continuous = true;
+  r.interimResults = true;
+
+  r.onresult = (event) => {
+    let interim = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const res = event.results[i];
+      const text = res[0].transcript;
+      if(res.isFinal){
+        const corrected = applyGlossary(text.trim());
+        if(corrected){
+          state.log.push({ t: nowHHMM(), text: corrected, at: Date.now() });
+          state.interimText = '';
+          maybeRequestAdvice();
+        }
+      } else {
+        interim += text;
+      }
+    }
+    state.interimText = interim;
+    state.lastSoundAt = Date.now();
+    silenceHint.classList.remove('show');
+    renderLog();
+  };
+
+  r.onerror = (event) => {
+    console.warn('SpeechRecognition error:', event.error);
+    if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){
+      state.manuallyStopped = true;
+      setStatus('error', '⚠️ マイク権限エラー');
+      showWarnBanner('⚠️ マイクの使用が許可されていません。ブラウザの設定をご確認ください');
+      stopInternals();
+    }
+    // no-speech / network / audio-capture 等は onend 側の再接続に任せる
+  };
+
+  r.onend = () => {
+    if(state.manuallyStopped){
+      setStatus('stopped', '⏸️ 停止');
+      return;
+    }
+    // 想定外の停止 → 指数バックオフで再接続
+    setStatus('error', '⚠️ 再接続中');
+    showWarnBanner('⚠️ 音声認識が停止しました。自動的に再接続を試みています');
+    scheduleReconnect();
+  };
+
+  return r;
+}
+
+function scheduleReconnect(){
+  clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = setTimeout(() => {
+    if(state.manuallyStopped) return;
+    try{
+      recognition.start();
+      state.reconnectDelay = 300;
+      setStatus('rec', '🔴 録音中');
+      hideWarnBanner();
+    }catch(e){
+      state.reconnectDelay = Math.min(state.reconnectDelay * 2, 5000);
+      scheduleReconnect();
+    }
+  }, state.reconnectDelay);
+}
+
+/* ========== マイク入力レベルメーター ========== */
+function startMicMeter(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    state.micStream = stream;
+    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = state.audioCtx.createMediaStreamSource(stream);
+    const analyser = state.audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    micMeterWrap.classList.add('show');
+    state.lastSoundAt = Date.now();
+
+    function loop(){
+      if(!state.recording) return;
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0) / data.length;
+      const pct = Math.min(100, Math.round(avg * 1.5));
+      micMeterBar.style.width = pct + '%';
+      if(pct > 8){ state.lastSoundAt = Date.now(); silenceHint.classList.remove('show'); }
+      else if(Date.now() - state.lastSoundAt > SILENCE_WARN_MS){ silenceHint.classList.add('show'); }
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  }).catch(err => {
+    console.warn('マイクレベルメーター用のgetUserMediaに失敗しました（音声認識自体には影響しません）:', err);
+    micMeterWrap.classList.remove('show');
+  });
+}
+function stopMicMeter(){
+  micMeterWrap.classList.remove('show');
+  micMeterBar.style.width = '0%';
+  if(state.micStream){ state.micStream.getTracks().forEach(t => t.stop()); state.micStream = null; }
+  if(state.audioCtx){ state.audioCtx.close().catch(()=>{}); state.audioCtx = null; }
+}
+
+/* ========== Wake Lock ========== */
+async function acquireWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    state.wakeLock.addEventListener('release', () => { /* 再取得はvisibilitychangeで行う */ });
+  }catch(e){ console.warn('Wake Lock取得失敗:', e); }
+}
+function releaseWakeLock(){
+  if(state.wakeLock){ state.wakeLock.release().catch(()=>{}); state.wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if(state.recording && document.visibilityState === 'visible' && !state.wakeLock){
+    acquireWakeLock();
+  }
+});
+
+/* ========== 録音開始・停止 ========== */
+$('startBtn').addEventListener('click', () => {
+  if(state.log.length > 0){
+    const ok = confirm('前回の会話ログが残っています。クリアして新しく始めますか？\n（キャンセルすると録音は開始されません）');
+    if(!ok) return;
+    clearSession();
+  }
+  recognition = createRecognition();
+  if(!recognition) return;
+  state.manuallyStopped = false;
+  state.reconnectDelay = 300;
+  try{
+    recognition.start();
+  }catch(e){
+    alert('音声認識の開始に失敗しました: ' + e.message);
+    return;
+  }
+  state.recording = true;
+  setStatus('rec', '🔴 録音中');
+  hideWarnBanner();
+  $('startBtn').disabled = true;
+  $('stopBtn').disabled = false;
+  acquireWakeLock();
+  startMicMeter();
+  state.autosaveTimer = setInterval(saveSession, AUTOSAVE_INTERVAL_MS);
+});
+
+function stopInternals(){
+  state.recording = false;
+  clearTimeout(state.reconnectTimer);
+  clearInterval(state.autosaveTimer);
+  releaseWakeLock();
+  stopMicMeter();
+  $('startBtn').disabled = false;
+  $('stopBtn').disabled = true;
+  saveSession();
+}
+
+$('stopBtn').addEventListener('click', () => {
+  state.manuallyStopped = true;
+  if(recognition){ try{ recognition.stop(); }catch(e){} }
+  stopInternals();
+  setStatus('stopped', '⏸️ 停止');
+  hideWarnBanner();
+});
+
+$('warnResumeBtn').addEventListener('click', () => {
+  hideWarnBanner();
+  state.manuallyStopped = false;
+  state.reconnectDelay = 300;
+  if(recognition){
+    try{ recognition.start(); setStatus('rec', '🔴 録音中'); }
+    catch(e){ scheduleReconnect(); }
+  }
+});
+
+$('clearBtn').addEventListener('click', () => {
+  if(!confirm('会話ログ・議事録・TODOをすべて削除します。よろしいですか？')) return;
+  clearSession();
+  toast('クリアしました');
+});
+
+/* ========== モード選択 ========== */
+modeSelect.addEventListener('change', () => { state.mode = modeSelect.value; });
+
+/* ========== カンペ生成 ========== */
+function maybeRequestAdvice(){
+  if(state.adviceInFlight) return;
+  if(Date.now() - state.lastAdviceDoneAt < ADVICE_MIN_INTERVAL_MS) return;
+  requestAdvice();
+}
+async function requestAdvice(){
+  const apiKey = localStorage.getItem(LS_KEYS.apiKey);
+  if(!apiKey) return; // 未設定時はカンペ生成をスキップ（設定を促すのはgenerate系ボタン押下時に行う）
+  const modeInfo = MODES[state.mode];
+  const modeInstructions = state.mode === 'custom'
+    ? (localStorage.getItem(LS_KEYS.customPrompt) || '')
+    : modeInfo.instructions;
+  const historyText = state.adviceHistory.length ? state.adviceHistory.join(' / ') : '';
+  const prompt = PROMPT_A(modeInfo.label, modeInstructions, meetingContextEl.value, historyText, recentLogForAdvice());
+
+  state.adviceInFlight = true;
+  try{
+    const text = await callClaude(apiKey, prompt, 100);
+    const advice = text.trim().slice(0, 60) || '💡 現在のところ順調です';
+    adviceArea.textContent = advice;
+    state.adviceHistory.push(advice);
+    if(state.adviceHistory.length > 3) state.adviceHistory.shift();
+  }catch(e){
+    console.error('カンペ生成エラー:', e);
+    // バックグラウンドのポーリング処理なので、画面を大きく崩さず控えめに表示するのみ
+  }finally{
+    state.adviceInFlight = false;
+    state.lastAdviceDoneAt = Date.now();
+  }
+}
+
+/* ========== Claude API 呼び出し ========== */
+async function callClaude(apiKey, prompt, maxTokens){
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if(!res.ok){
+    const errBody = await res.text().catch(()=> '');
+    throw new Error(`APIエラー (HTTP ${res.status}): ${errBody.slice(0,200)}`);
+  }
+  const data = await res.json();
+  return (data.content && data.content[0] && data.content[0].text) || '';
+}
+
+/* ========== 議事録・TODO生成 ========== */
+function syncResultTextarea(){
+  resultText.value = state.activeTab === 'minutes' ? state.minutesText : state.todoText;
+}
+$('tabMinutes').addEventListener('click', () => switchTab('minutes'));
+$('tabTodo').addEventListener('click', () => switchTab('todo'));
+function switchTab(tab){
+  state.minutesText = state.activeTab === 'minutes' ? resultText.value : state.minutesText;
+  state.todoText = state.activeTab === 'todo' ? resultText.value : state.todoText;
+  state.activeTab = tab;
+  $('tabMinutes').classList.toggle('active', tab === 'minutes');
+  $('tabTodo').classList.toggle('active', tab === 'todo');
+  syncResultTextarea();
+}
+resultText.addEventListener('input', () => {
+  if(state.activeTab === 'minutes') state.minutesText = resultText.value;
+  else state.todoText = resultText.value;
+});
+
+function requireApiKey(){
+  const apiKey = localStorage.getItem(LS_KEYS.apiKey);
+  if(!apiKey){
+    alert('設定画面からClaude APIキーを登録してください。');
+    return null;
+  }
+  return apiKey;
+}
+async function withLoading(btns, fn){
+  btns.forEach(b => b.disabled = true);
+  const orig = btns.map(b => b.textContent);
+  btns.forEach(b => b.textContent = '⏳ 生成中…');
+  try{
+    await fn();
+  }catch(e){
+    console.error(e);
+    alert('エラーが発生しました。再度お試しください。\n' + e.message);
+  }finally{
+    btns.forEach((b,i) => { b.disabled = false; b.textContent = orig[i]; });
+  }
+}
+async function generateMinutes(){
+  const apiKey = requireApiKey(); if(!apiKey) return;
+  const prompt = PROMPT_B(meetingContextEl.value, fullLogPlainText());
+  const text = await callClaude(apiKey, prompt, 2000);
+  state.minutesText = text;
+  switchTab('minutes');
+  saveSession();
+}
+async function generateTodo(){
+  const apiKey = requireApiKey(); if(!apiKey) return;
+  const prompt = PROMPT_C(fullLogPlainText());
+  const text = await callClaude(apiKey, prompt, 1500);
+  state.todoText = text;
+  switchTab('todo');
+  saveSession();
+}
+$('minutesBtn').addEventListener('click', () => withLoading([$('minutesBtn')], generateMinutes));
+$('todoBtn').addEventListener('click', () => withLoading([$('todoBtn')], generateTodo));
+$('bothBtn').addEventListener('click', () => withLoading(
+  [$('minutesBtn'), $('todoBtn'), $('bothBtn')],
+  async () => { await Promise.all([generateMinutes(), generateTodo()]); switchTab('minutes'); }
+));
+
+/* ========== コピー機能 ========== */
+function currentResultText(){ return resultText.value; }
+async function copyToClipboard(label){
+  const text = currentResultText();
+  if(!text){ toast('コピーする内容がありません'); return; }
+  try{
+    await navigator.clipboard.writeText(text);
+    toast(label + 'をコピーしました');
+  }catch(e){
+    toast('コピーに失敗しました');
+  }
+}
+$('copySlack').addEventListener('click', () => copyToClipboard('Slack形式'));
+$('copyNotion').addEventListener('click', () => copyToClipboard('Notion/Backlog用'));
+
+/* ========== 設定モーダル ========== */
+const settingsModal = $('settingsModal');
+$('settingsBtn').addEventListener('click', () => {
+  $('apiKeyInput').value = localStorage.getItem(LS_KEYS.apiKey) || '';
+  $('customPromptInput').value = localStorage.getItem(LS_KEYS.customPrompt) || '';
+  renderGlossaryRows();
+  settingsModal.showModal();
+});
+$('settingsCancel').addEventListener('click', () => settingsModal.close());
+$('settingsSave').addEventListener('click', () => {
+  localStorage.setItem(LS_KEYS.apiKey, $('apiKeyInput').value.trim());
+  localStorage.setItem(LS_KEYS.customPrompt, $('customPromptInput').value);
+  const rows = [...document.querySelectorAll('.glossaryRow')].map(row => ({
+    from: row.querySelector('.g-from').value.trim(),
+    to: row.querySelector('.g-to').value.trim(),
+  })).filter(r => r.from);
+  state.glossary = rows;
+  localStorage.setItem(LS_KEYS.glossary, JSON.stringify(rows));
+  settingsModal.close();
+  toast('設定を保存しました');
+});
+function renderGlossaryRows(){
+  const list = $('glossaryList');
+  list.innerHTML = '';
+  const rows = state.glossary.length ? state.glossary : [{from:'',to:''}];
+  rows.forEach(r => addGlossaryRow(r.from, r.to));
+}
+function addGlossaryRow(from='', to=''){
+  const row = document.createElement('div');
+  row.className = 'glossaryRow';
+  row.innerHTML = `
+    <input type="text" class="g-from" placeholder="誤認識されやすい語" value="${escapeHtml(from)}">
+    <input type="text" class="g-to" placeholder="正しい表記" value="${escapeHtml(to)}">
+    <button type="button" class="g-del">✕</button>`;
+  row.querySelector('.g-del').addEventListener('click', () => row.remove());
+  $('glossaryList').appendChild(row);
+}
+$('addGlossaryRow').addEventListener('click', () => addGlossaryRow());
+
+/* ========== Service Worker 登録（任意・失敗しても本体には影響しない） ========== */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+/* ========== 初期化 ========== */
+loadSettings();
+loadSession();
+modeSelect.value = state.mode;
+renderLog();
+syncResultTextarea();
+
+})();
+</script>
+</body>
+</html>
