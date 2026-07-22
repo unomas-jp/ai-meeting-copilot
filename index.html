@@ -622,7 +622,11 @@ function maybeRequestAdvice(){
 }
 async function requestAdvice(){
   const apiKey = localStorage.getItem(LS_KEYS.apiKey);
-  if(!apiKey) return; // 未設定時はカンペ生成をスキップ（設定を促すのはgenerate系ボタン押下時に行う）
+  if(!apiKey){
+    // 未設定のまま黙ってスキップすると原因が分かりにくいため、一度だけ画面上に明示する
+    adviceArea.textContent = '💡 ⚙️設定でClaude APIキーを登録すると、ここにカンペが表示されます';
+    return;
+  }
   const modeInfo = MODES[state.mode];
   const modeInstructions = state.mode === 'custom'
     ? (localStorage.getItem(LS_KEYS.customPrompt) || '')
@@ -674,16 +678,22 @@ async function callClaude(apiKey, prompt, maxTokens){
 function syncResultTextarea(){
   resultText.value = state.activeTab === 'minutes' ? state.minutesText : state.todoText;
 }
-$('tabMinutes').addEventListener('click', () => switchTab('minutes'));
-$('tabTodo').addEventListener('click', () => switchTab('todo'));
-function switchTab(tab){
-  state.minutesText = state.activeTab === 'minutes' ? resultText.value : state.minutesText;
-  state.todoText = state.activeTab === 'todo' ? resultText.value : state.todoText;
+// プログラムから「このタブの中身が確定した内容を表示する」ときに使う。
+// 表示中のテキストエリアの値でstateを上書きしない（生成結果を消してしまうバグの原因だったため分離した）。
+function activateTab(tab){
   state.activeTab = tab;
   $('tabMinutes').classList.toggle('active', tab === 'minutes');
   $('tabTodo').classList.toggle('active', tab === 'todo');
   syncResultTextarea();
 }
+// ユーザーが手動でタブボタンを押したときだけ使う。今編集中の内容をstateに反映してから切り替える。
+function onTabClick(tab){
+  if(state.activeTab === 'minutes') state.minutesText = resultText.value;
+  else state.todoText = resultText.value;
+  activateTab(tab);
+}
+$('tabMinutes').addEventListener('click', () => onTabClick('minutes'));
+$('tabTodo').addEventListener('click', () => onTabClick('todo'));
 resultText.addEventListener('input', () => {
   if(state.activeTab === 'minutes') state.minutesText = resultText.value;
   else state.todoText = resultText.value;
@@ -715,7 +725,7 @@ async function generateMinutes(){
   const prompt = PROMPT_B(meetingContextEl.value, fullLogPlainText());
   const text = await callClaude(apiKey, prompt, 2000);
   state.minutesText = text;
-  switchTab('minutes');
+  activateTab('minutes');
   saveSession();
 }
 async function generateTodo(){
@@ -723,14 +733,14 @@ async function generateTodo(){
   const prompt = PROMPT_C(fullLogPlainText());
   const text = await callClaude(apiKey, prompt, 1500);
   state.todoText = text;
-  switchTab('todo');
+  activateTab('todo');
   saveSession();
 }
 $('minutesBtn').addEventListener('click', () => withLoading([$('minutesBtn')], generateMinutes));
 $('todoBtn').addEventListener('click', () => withLoading([$('todoBtn')], generateTodo));
 $('bothBtn').addEventListener('click', () => withLoading(
   [$('minutesBtn'), $('todoBtn'), $('bothBtn')],
-  async () => { await Promise.all([generateMinutes(), generateTodo()]); switchTab('minutes'); }
+  async () => { await Promise.all([generateMinutes(), generateTodo()]); activateTab('minutes'); }
 ));
 
 /* ========== コピー機能 ========== */
