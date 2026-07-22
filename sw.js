@@ -4,7 +4,9 @@
 // ここではアプリの「殻」(index.html等)だけを簡易キャッシュし、
 // 完全なオフライン動作は保証しない。
 
-const CACHE_NAME = 'ai-meeting-copilot-v1';
+// v2: 「キャッシュ優先」だと更新後もスマホが古いindex.htmlを表示し続けてしまう不具合があったため、
+// 「ネットワーク優先（オフライン時のみキャッシュにフォールバック）」に変更する。
+const CACHE_NAME = 'ai-meeting-copilot-v2';
 const APP_SHELL = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -30,7 +32,15 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
     return;
   }
+  // ネットワーク優先：まず最新版の取得を試み、成功したらキャッシュも更新する。
+  // オフライン等でネットワーク取得に失敗した場合のみ、キャッシュ済みの内容を返す。
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).catch(() => cached))
+    fetch(event.request)
+      .then((res) => {
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
